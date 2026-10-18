@@ -13,7 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from vision_engine import VisionEngine
+try:
+    from backend.vision_engine import VisionEngine
+except ImportError:
+    from vision_engine import VisionEngine
 
 engine: VisionEngine = None
 
