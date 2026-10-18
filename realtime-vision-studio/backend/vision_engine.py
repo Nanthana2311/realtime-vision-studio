@@ -96,23 +96,31 @@ class VisionEngine:
     Supports Face & Eye tracking, Motion/Centroid tracking with virtual tripwire,
     and a clean plug-in slot for custom YOLO/PyTorch models.
     """
-    def __init__(self):
-        # OpenCV Haar Cascades for real-time tracking
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        )
-        self.eye_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + 'haarcascade_eye.xml'
-        )
-        self.bg_subtractor = cv2.createBackgroundSubtractorMOG2(
-            history=120, varThreshold=40, detectShadows=False
-        )
+        def __init__(self):
+        self.face_cascade = None
+        self.eye_cascade = None
+
+        cascade_cls = getattr(cv2, 'CascadeClassifier', None)
+        if cascade_cls is None and hasattr(cv2, 'objdetect'):
+            cascade_cls = getattr(cv2.objdetect, 'CascadeClassifier', None)
+
+        haarcascade_dir = getattr(getattr(cv2, 'data', None), 'haarcascades', None)
+        if cascade_cls is not None and haarcascade_dir is not None:
+            try:
+                self.face_cascade = cascade_cls(haarcascade_dir + 'haarcascade_frontalface_default.xml')
+                self.eye_cascade = cascade_cls(haarcascade_dir + 'haarcascade_eye.xml')
+            except Exception as e:
+                print(f"Warning: {e}")
+
+        try:
+            self.bg_subtractor = cv2.createBackgroundSubtractorMOG2(
+                history=120, varThreshold=40, detectShadows=False
+            )
+        except Exception:
+            self.bg_subtractor = None
+
         self.tracker = CentroidTracker()
         self.detection_history: deque = deque(maxlen=200)
-
-    def process_frame(
-        self,
-        frame: np.ndarray,
         mode: str = "face",
         confidence_thresh: float = 0.5,
         tripwire_pos_pct: float = 0.5
