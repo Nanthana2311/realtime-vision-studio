@@ -96,7 +96,7 @@ class VisionEngine:
     Supports Face & Eye tracking, Motion/Centroid tracking with virtual tripwire,
     and a clean plug-in slot for custom YOLO/PyTorch models.
     """
-        def __init__(self):
+    def __init__(self):
         self.face_cascade = None
         self.eye_cascade = None
 
@@ -121,6 +121,10 @@ class VisionEngine:
 
         self.tracker = CentroidTracker()
         self.detection_history: deque = deque(maxlen=200)
+
+    def process_frame(
+        self,
+        frame: np.ndarray,
         mode: str = "face",
         confidence_thresh: float = 0.5,
         tripwire_pos_pct: float = 0.5
@@ -129,15 +133,15 @@ class VisionEngine:
         h, w = frame.shape[:2]
         detections = []
         tripwire_y = int(h * tripwire_pos_pct)
+        rects = []
 
-        if mode == "face":
+        if mode == "face" and self.face_cascade is not None:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             gray = cv2.equalizeHist(gray)
             faces = self.face_cascade.detectMultiScale(
                 gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30)
             )
 
-            rects = []
             for (x, y, fw, fh) in faces:
                 conf = round(0.85 + 0.12 * min(1.0, fw / 160.0), 2)
                 if conf >= confidence_thresh:
@@ -146,31 +150,30 @@ class VisionEngine:
                         "label": "Face",
                         "confidence": conf,
                         "bbox": [int(x), int(y), int(fw), int(fh)],
-                        "color": "#10B981"  # Emerald
+                        "color": "#10B981"
                     })
 
-                    # Eyes within face ROI
-                    roi_gray = gray[y:y+fh, x:x+fw]
-                    eyes = self.eye_cascade.detectMultiScale(
-                        roi_gray, scaleFactor=1.1, minNeighbors=8, minSize=(10, 10)
-                    )
-                    for (ex, ey, ew, eh) in eyes[:2]:
-                        detections.append({
-                            "label": "Eye",
-                            "confidence": 0.89,
-                            "bbox": [int(x + ex), int(y + ey), int(ew), int(eh)],
-                            "color": "#3B82F6"  # Blue
-                        })
+                    if self.eye_cascade is not None:
+                        roi_gray = gray[y:y+fh, x:x+fw]
+                        eyes = self.eye_cascade.detectMultiScale(
+                            roi_gray, scaleFactor=1.1, minNeighbors=8, minSize=(10, 10)
+                        )
+                        for (ex, ey, ew, eh) in eyes[:2]:
+                            detections.append({
+                                "label": "Eye",
+                                "confidence": 0.89,
+                                "bbox": [int(x + ex), int(y + ey), int(ew), int(eh)],
+                                "color": "#3B82F6"
+                            })
 
             crossings = self.tracker.update(rects, tripwire_y)
 
-        elif mode == "motion":
+        elif mode == "motion" and self.bg_subtractor is not None:
             fg_mask = self.bg_subtractor.apply(frame)
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
             contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            rects = []
             for cnt in contours:
                 area = cv2.contourArea(cnt)
                 if area > 600:
@@ -182,12 +185,12 @@ class VisionEngine:
                             "label": "Moving Object",
                             "confidence": conf,
                             "bbox": [int(x), int(y), int(bw), int(bh)],
-                            "color": "#F59E0B"  # Amber
+                            "color": "#F59E0B"
                         })
 
             crossings = self.tracker.update(rects, tripwire_y)
 
-        elif mode == "edges":
+        else:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             edges = cv2.Canny(gray, 80, 180)
             contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -196,13 +199,14 @@ class VisionEngine:
             for cnt in sorted_contours:
                 if cv2.contourArea(cnt) > 300:
                     x, y, bw, bh = cv2.boundingRect(cnt)
+                    rects.append((int(x), int(y), int(bw), int(bh)))
                     detections.append({
-                        "label": "Edge Contour",
+                        "label": "Contour Object",
                         "confidence": 0.94,
                         "bbox": [int(x), int(y), int(bw), int(bh)],
-                        "color": "#8B5CF6"  # Violet
+                        "color": "#8B5CF6"
                     })
-            crossings = self.tracker.crossings_count
+            crossings = self.tracker.update(rects, tripwire_y)
 
         inference_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
@@ -214,7 +218,6 @@ class VisionEngine:
             "tracked_objects": len(self.tracker.objects)
         }
 
-        # Save to history for CSV export
         timestamp_str = time.strftime("%H:%M:%S")
         for det in detections:
             self.detection_history.append({
