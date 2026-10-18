@@ -1,5 +1,7 @@
 # 👁️ VisionStudio Edge
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Online-brightgreen?style=for-the-badge&logo=render)](https://realtime-vision-studio.onrender.com)
 
+🔗 **Live Cloud Application:** [https://realtime-vision-studio.onrender.com](https://realtime-vision-studio.onrender.com)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![WebSockets](https://img.shields.io/badge/WebSockets-Real--Time-orange.svg)](https://websockets.readthedocs.io/)
